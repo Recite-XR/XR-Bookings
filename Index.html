@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resource Booking System</title>
+    <style>
+      :root {
+        --primary-color: #006633;    /* Main brand color */
+        --secondary-color: #009639;  /* Secondary brand color */
+        --accent-color: #FFE100;     /* Accent color for highlights */
+        --neutral-dark: #333333;     /* Dark text color */
+        --neutral-light: #FFFFFF;    /* Light background color */
+        --neutral-mid: #BBBBBB;      /* Mid-tone for borders etc */
+      }
+      
+      body { 
+        font-family: Arial, sans-serif; 
+        line-height: 1.6; 
+        color: var(--neutral-dark); 
+        max-width: 800px; 
+        margin: 0 auto; 
+        padding: 20px;
+        background-color: var(--neutral-light);
+      }
+      
+      h1 { 
+        color: var(--primary-color);
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      
+      .calendar { 
+        display: grid; 
+        grid-template-columns: repeat(5, 1fr); 
+        gap: 5px; 
+        margin-bottom: 20px;
+        background-color: var(--neutral-light);
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .calendar-header {
+        font-weight: bold;
+        text-align: center;
+        color: var(--primary-color);
+        padding: 5px;
+      }
+      
+      .calendar-day { 
+        border: 1px solid var(--neutral-mid); 
+        padding: 10px 5px; 
+        text-align: center;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      
+      .calendar-day.available { 
+        background-color: var(--secondary-color); 
+        color: var(--neutral-light);
+        cursor: pointer;
+      }
+      
+      .calendar-day.unavailable { 
+        background-color: var(--neutral-mid); 
+        color: var(--neutral-dark);
+        opacity: 0.5;
+      }
+      
+      .calendar-day.selected { 
+        background-color: var(--accent-color); 
+        color: var(--neutral-dark);
+      }
+      
+      .calendar-day.today {
+        border: 2px solid var(--primary-color);
+        font-weight: bold;
+      }
+      
+      .booking-form { 
+        display: none;
+        background-color: var(--neutral-light);
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .warning {
+        background-color: var(--accent-color);
+        color: var(--neutral-dark);
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      
+      input, select { 
+        width: 100%; 
+        padding: 10px; 
+        margin-bottom: 15px;
+        border: 1px solid var(--neutral-mid);
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      
+      button { 
+        background-color: var(--primary-color); 
+        color: var(--neutral-light); 
+        padding: 12px 20px; 
+        border: none; 
+        cursor: pointer;
+        width: 100%;
+        border-radius: 4px;
+        font-size: 1em;
+      }
+      
+      button:hover { 
+        background-color: var(--secondary-color);
+      }
+      
+      @media (max-width: 600px) {
+        .calendar {
+          font-size: 0.8em;
+        }
+        .calendar-day {
+          padding: 5px 2px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="page-title">Resource Booking System</h1>
+    <div id="calendar" class="calendar"></div>
+    <div id="booking-form" class="booking-form">
+      <div class="warning">
+        This form is to REQUEST a booking. A staff member will follow up to confirm your appointment. 
+        For immediate assistance, please contact us directly.
+      </div>
+      <h2>Book Your Session</h2>
+      <form id="booking-form">
+        <input type="text" id="name" name="name" placeholder="Full Name" required>
+        <input type="email" id="email" name="email" placeholder="Institutional Email" required>
+        <input type="tel" id="phone" name="phone" placeholder="Phone Number" required>
+        <input type="text" id="department" name="department" placeholder="Department" required>
+        <select id="location" name="location" required>
+          <option value="">Select Location</option>
+        </select>
+        <select id="time-select" name="time" required>
+          <option value="">Select Time</option>
+        </select>
+        <input type="hidden" id="date" name="date">
+        <button type="submit">Request Appointment</button>
+      </form>
+    </div>
+
+    <script>
+      // Get configuration from Code.gs
+      let selectedDate = null;
+      let selectedTime = null;
+
+      function loadCalendar() {
+        google.script.run.withSuccessHandler(displayCalendar).getAvailableSlots();
+      }
+
+      function displayCalendar(slots) {
+        const calendarDiv = document.getElementById('calendar');
+        calendarDiv.innerHTML = '';
+
+        // Add day headers
+        const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        daysOfWeek.forEach(day => {
+          const dayHeader = document.createElement('div');
+          dayHeader.className = 'calendar-header';
+          dayHeader.textContent = day;
+          calendarDiv.appendChild(dayHeader);
+        });
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Find the most recent Monday
+        const startDate = new Date(today);
+        startDate.setDate(startDate.getDate() - (startDate.getDay() + 6) % 7);
+
+        // Create calendar days
+        for (let week = 0; week < 4; week++) {
+          for (let day = 0; day < 5; day++) {
+            const currentDate = new Date(startDate);
+            currentDate.setDate(currentDate.getDate() + (week * 7) + day);
+            
+            const dateString = formatDate(currentDate);
+            const slot = slots.find(s => s.date === dateString);
+
+            const dayDiv = document.createElement('div');
+            dayDiv.className = 'calendar-day';
+            dayDiv.textContent = currentDate.getDate();
+
+            if (slot && slot.available) {
+              dayDiv.classList.add('available');
+              dayDiv.onclick = () => selectDate(dateString, slot.times);
+            } else {
+              dayDiv.classList.add('unavailable');
+            }
+
+            if (currentDate.toDateString() === today.toDateString()) {
+              dayDiv.classList.add('today');
+            }
+
+            calendarDiv.appendChild(dayDiv);
+          }
+        }
+
+        // Populate location dropdown
+        const locationSelect = document.getElementById('location');
+        locationSelect.innerHTML = '<option value="">Select Location</option>';
+        CONFIG.booking.locations.forEach(location => {
+          const option = document.createElement('option');
+          option.value = location.name;
+          option.textContent = location.name;
+          locationSelect.appendChild(option);
+        });
+      }
+
+      function selectDate(date, times) {
+        selectedDate = date;
+        const calendarDays = document.querySelectorAll('.calendar-day');
+        calendarDays.forEach(day => day.classList.remove('selected'));
+        event.target.classList.add('selected');
+
+        const bookingForm = document.getElementById('booking-form');
+        bookingForm.style.display = 'block';
+
+        const timeSelect = document.getElementById('time-select');
+        timeSelect.innerHTML = '<option value="">Select Time</option>';
+        times.forEach(time => {
+          const option = document.createElement('option');
+          option.value = time;
+          option.textContent = time;
+          timeSelect.appendChild(option);
+        });
+
+        document.getElementById('date').value = date;
+      }
+
+      function formatDate(date) {
+        return date.getFullYear() + '-' + 
+               String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+               String(date.getDate()).padStart(2, '0');
+      }
+
+      document.getElementById('booking-form').onsubmit = function(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const bookingData = Object.fromEntries(formData.entries());
+        google.script.run.withSuccessHandler(bookingComplete).bookSlot(bookingData);
+      }
+
+      function bookingComplete(result) {
+        alert(result);
+        if (result === "Booking request submitted successfully!") {
+          document.getElementById('booking-form').reset();
+          document.getElementById('booking-form').style.display = 'none';
+          loadCalendar();
+        }
+      }
+
+      // Initialize page
+      document.addEventListener('DOMContentLoaded', function() {
+        // Set page title from config
+        document.getElementById('page-title').textContent = CONFIG.institution.systemName;
+        
+        // Set email pattern
+        const emailInput = document.getElementById('email');
+        emailInput.pattern = `.*@${CONFIG.institution.emailDomain}$`;
+        emailInput.placeholder = `Email (@${CONFIG.institution.emailDomain})`;
+        
+        loadCalendar();
+      });
+    </script>
+  </body>
+</html>
